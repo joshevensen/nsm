@@ -1,8 +1,10 @@
 # Infrastructure Topology
 
 Four DigitalOcean droplets, managed via Laravel Forge, using DO Reserved
-IPs so server identity is stable across a droplet being destroyed and
-recreated (e.g. disaster recovery, resizing).
+IPs on all four so server identity is stable across a droplet being
+destroyed and recreated (disaster recovery) — see "Reserved IPs" below
+for why this applies to all four, not just the ones with public DNS
+pointing at them.
 
 ## App Server — production app fleet
 
@@ -84,6 +86,43 @@ recreated (e.g. disaster recovery, resizing).
   the highest-value target in the portfolio (it can touch every app's
   data), so the name is meant to cue that this box needs the extra care
   even though staging sites live here too — see `decisions.md`.
+
+## Reserved IPs
+
+All four servers use a DO Reserved IP, not their default ephemeral
+droplet IP. This isn't about routine resizing — a normal DO droplet
+resize (more RAM/CPU on the same droplet) keeps the same IP already.
+It's about a full destroy-and-recreate, e.g. the disaster-recovery flow
+(a GitHub Action standing up a replacement droplet, per Novelize's own
+consolidation plan) — a fresh droplet gets a brand new ephemeral IP by
+default.
+
+Applies to all four servers, not just the ones with public DNS pointing
+at them, because they cross-reference each other by IP:
+
+- **App Server / Marketing Server**: DNS records point directly at
+  these. Without a reserved IP, a rebuild means updating DNS and waiting
+  on propagation before anything is reachable again.
+- **DB Server**: no public DNS, but every app's `DB_HOST` env var
+  references its IP directly — a rebuild without a reserved IP means
+  updating that value across every app on App Server and NSM Server.
+- **NSM Server**: DB Server's firewall allow-lists NSM Server's IP as a
+  trusted source. A rebuild without a reserved IP means DB Server
+  silently rejects NSM Server's connections until that allow-list is
+  manually updated.
+
+There's also a security reason beyond convenience: a released ephemeral
+IP eventually goes back into DO's general pool and can be reassigned to
+a *different* customer's droplet. A stale DNS record or firewall rule
+left pointing at an old, non-reserved IP after a rebuild could end up
+trusting or routing to an unrelated third party's server later. A
+reserved IP stays owned by the account until explicitly released, so
+that risk doesn't exist.
+
+Cost: free while attached to a running droplet — DO only charges
+(~$5/mo) for a reserved IP sitting unattached. Since these are only ever
+briefly reassigned during an actual rebuild, there's no real cost
+tradeoff to using one on all four.
 
 ## Object storage
 
