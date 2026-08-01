@@ -18,20 +18,25 @@ recreated (e.g. disaster recovery, resizing).
 
 ## Server B — Database + Redis
 
-- One MySQL instance, one database (schema) per app, one DB user per
-  app — not one shared schema. Forge manages database creation on this
-  server, same as it would for an app-local database today.
-- Rationale for "one instance, separate schemas/users" over either
-  extreme (fully shared schema, or fully separate DB servers per app):
+- **One Postgres instance (Postgres 18), one database per app, one DB
+  user per app** — not one shared database. Forge manages database
+  creation on this server, same as it would for an app-local database
+  today. Postgres, not MySQL, standardized across every app — see
+  `decisions.md` for why (pgvector availability was the deciding
+  factor).
+- `pgvector` extension enabled on this instance, so any app can adopt
+  embeddings/RAG-style AI features later without a separate vector store.
+- Rationale for "one instance, separate databases/users" over either
+  extreme (fully shared database, or fully separate DB servers per app):
   keeps the operational/cost benefits of centralizing (shared backups,
-  shared monitoring, shared buffer pool tuning) while keeping a clean
+  shared monitoring, shared memory/cache tuning) while keeping a clean
   per-app revoke/kill boundary — see "Kill switch" in `features.md`.
 - Redis/Valkey also lives on this server, shared across apps. Since
   queue *workers* are per-app (see Server A), the shared Redis instance
   needs per-app key prefixes / separate Redis DB indexes so queues don't
   collide between apps.
 - Firewalled: only Server A (prod app fleet) and Server C (NSM) are
-  trusted sources for this server's MySQL/Redis ports, using the same
+  trusted sources for this server's Postgres/Redis ports, using the same
   "fetch existing firewall rules, append, PUT back" pattern already
   implemented in Fibermade's `database.sh` (`pg_firewall_add_droplet`).
 
@@ -53,7 +58,7 @@ up on an actual monitoring signal rather than guessing up front.
 | Server | Starting size | Cost | Why |
 |---|---|---|---|
 | A — prod app fleet | 4GB / 2vCPU / 80GB | ~$24/mo | Matches what Novelize's own consolidation plan sized for one app + DB combined; here DB is split off entirely onto Server B, so this server only carries web + PHP-FPM + Horizon + scheduler across all three apps. Per-app DB load is close to idle (`Threads_running` ~1, load average <0.1 per `db-sizing-findings.md`), so this isn't traffic/CPU-bound. The 2nd vCPU exists so one app's deploy (`composer install`/`npm run build`) doesn't stall live requests for the others running concurrently on the same box. |
-| B — DB + Redis | 4GB / 2vCPU / 80GB | ~$24/mo | Combined data footprint for a whole app is under 1.5GB (`db-sizing-findings.md`), and the actual failure last time wasn't disk size — `innodb_buffer_pool_size` sat at 128MB despite 3.9GB of unused RAM. Size for buffer-pool headroom across three apps' combined working set plus Redis's share, not for the tiny data volume. |
+| B — DB + Redis | 4GB / 2vCPU / 80GB | ~$24/mo | Combined data footprint for a whole app is under 1.5GB (`db-sizing-findings.md`), and the actual failure last time wasn't disk size — `innodb_buffer_pool_size` sat at 128MB despite 3.9GB of unused RAM. The same lesson applies to Postgres's `shared_buffers`/`effective_cache_size`, which ship with similarly conservative defaults — size for cache headroom across three apps' combined working set plus Redis's share, not for the tiny data volume, and set these explicitly rather than leaving Postgres defaults in place. |
 | C — NSM + staging | 2GB / 1vCPU / 50GB | ~$12/mo | NSM's traffic is just the owner (and eventually one more team member) — negligible. Staging sites see no real user load either; the only real resource pressure here is periodic build steps during deploys, not sustained traffic. |
 
 **Total: ~$60/mo** for the whole portfolio's infrastructure.

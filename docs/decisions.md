@@ -3,10 +3,62 @@
 Record of the notable choices made while scoping NSM, and the reasoning
 behind them — so the "why" isn't lost later.
 
+## Standardize on Postgres, migrate off MySQL
+
+All apps run on a single Postgres instance (Server B), not MySQL, and
+not a mix of both. Before this decision, the portfolio was already
+split — Fibermade provisions DO Managed Postgres for production
+(`fibermade/.github/scripts/create-server.sh`), while Novelize runs
+MySQL 5.7 in production. A shared DB server needs one engine, not two:
+running both permanently on Server B would mean twice the patching,
+tuning, and monitoring surface for no benefit, working directly against
+NSM's simplicity-first priority.
+
+**Chose Postgres over MySQL**, for one concrete, forward-looking reason:
+`pgvector` gives every app a path to embeddings/RAG-style AI features
+using infrastructure already being run, with no separate vector store to
+stand up later. MySQL's equivalent (HeatWave vector search) is an Oracle
+Cloud-only managed feature, not available in the self-hosted community
+MySQL that Forge/DO would provision here — so this isn't available on
+the MySQL path at all, self-hosted.
+
+**Chose to migrate Novelize rather than migrate Fibermade to MySQL**,
+since Novelize is the smaller, older, lower-activity codebase (Laravel
+8, <1GB of data, idle load per `db-sizing-findings.md`) — meaningfully
+cheaper to move than Fibermade, which is the actively developed,
+larger, newer (Laravel 13) app. YaFaBa and any future app should be
+built on Postgres from the start; no migration question there.
+
+**What the Novelize migration actually requires** (found via a scoped,
+non-exhaustive code search — treat as a floor, not a guarantee there's
+nothing else):
+
+- At least one known MySQL-specific query needs rewriting:
+  `->orderBy(DB::raw('RAND()'))` in `NameController.php` →
+  Postgres's `RANDOM()`.
+- A full regression pass (`php artisan test`) against Postgres before
+  cutover, not just a syntax-level check.
+- This lands at the same time as an open, separate question — whether
+  Novelize's very old dependency set (Laravel 8, `doctrine/dbal` 2.x,
+  `fideloper/proxy`, `fruitcake/laravel-cors`, `intervention/image`
+  2.5.1 — all abandoned or pre-dating PHP 8.3/8.4-era changes) actually
+  runs cleanly on the PHP 8.4 target. Since Novelize needs to be touched
+  and fully retested for the Postgres move regardless, verifying PHP 8.4
+  compatibility in the same pass is more efficient than two separate
+  verification cycles later.
+- Same dump/restore discipline as Novelize's own prior MySQL 5.7 → 8.0
+  migration plan (`db-app-consolidation-migration-plan.md`) applies here
+  too: test the restore against a throwaway Postgres 18 instance before
+  the real cutover window, not live.
+
+This also makes the earlier "MySQL 8.0 vs 8.4" sizing question moot —
+there's no MySQL instance being provisioned at all.
+
 ## Shared DB server accepted, with mitigations for its known risk
 
-One MySQL instance on Server B serves every app (separate schema/user
-per app, not a fully shared schema). This concentrates risk that
+One Postgres instance on Server B serves every app (separate
+database/user per app, not a fully shared database). This concentrates
+risk that
 previously prior per-project infra planning had argued against at the
 single-app level (see Novelize's own
 `docs/devops/db-app-consolidation-migration-plan.md`, which rejected

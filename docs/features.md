@@ -67,7 +67,7 @@ idempotent get-or-create patterns already proven out in Fibermade's
   screen. Every screen operates within a single, explicitly selected
   "current SaaS" context.
 - This is enforced naturally by the infrastructure choice of
-  separate-schema-per-app (see `infrastructure.md`) — a request only
+  separate-database-per-app (see `infrastructure.md`) — a request only
   ever holds one app's DB connection at a time.
 
 ## Database GUI (read-only)
@@ -83,7 +83,7 @@ idempotent get-or-create patterns already proven out in Fibermade's
   infrastructure without affecting the others — e.g. revoke/suspend that
   app's DB user on Server B, or kill its active queries.
 - Exists specifically to bound the "noisy neighbor" risk that comes from
-  sharing one MySQL instance and one Redis instance across apps: turns a
+  sharing one Postgres instance and one Redis instance across apps: turns a
   potential slow-degradation incident into a quick, contained cutoff.
 - Should be built before it's needed, not after.
 
