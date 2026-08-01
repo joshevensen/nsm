@@ -8,8 +8,8 @@ idempotent get-or-create patterns already proven out in Fibermade's
 `.github/scripts/` (`lib.sh`, `create-server.sh`, `database.sh`,
 `dns.sh`, `spaces.sh`, `stripe-webhook.sh`):
 
-- Spin up a new SaaS: create its Forge site on Server A, its database +
-  user on Server B, its staging site + database on Server C, DNS
+- Spin up a new SaaS: create its Forge site on App Server, its database +
+  user on DB Server, its staging site + database on NSM Server, DNS
   records, Spaces bucket, Stripe webhook, initial `.env`.
 - Spin down / decommission a SaaS.
 - Manage existing apps: redeploy, view deployment status, restart
@@ -45,7 +45,7 @@ idempotent get-or-create patterns already proven out in Fibermade's
   does not reimplement Horizon's UI.
 - Surfaces per-app scheduled-task status (last run, next run,
   success/failure) for visibility, without owning execution — execution
-  stays with each app's own Laravel scheduler on Server A.
+  stays with each app's own Laravel scheduler on App Server.
 
 ## Admin panel for apps and services
 
@@ -81,7 +81,7 @@ idempotent get-or-create patterns already proven out in Fibermade's
 
 - A fast, one-click way to cut off a single misbehaving app from shared
   infrastructure without affecting the others — e.g. revoke/suspend that
-  app's DB user on Server B, or kill its active queries.
+  app's DB user on DB Server, or kill its active queries.
 - Exists specifically to bound the "noisy neighbor" risk that comes from
   sharing one Postgres instance and one Redis instance across apps: turns a
   potential slow-degradation incident into a quick, contained cutoff.

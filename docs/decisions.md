@@ -5,12 +5,12 @@ behind them — so the "why" isn't lost later.
 
 ## Standardize on Postgres, migrate off MySQL
 
-All apps run on a single Postgres instance (Server B), not MySQL, and
+All apps run on a single Postgres instance (DB Server), not MySQL, and
 not a mix of both. Before this decision, the portfolio was already
 split — Fibermade provisions DO Managed Postgres for production
 (`fibermade/.github/scripts/create-server.sh`), while Novelize runs
 MySQL 5.7 in production. A shared DB server needs one engine, not two:
-running both permanently on Server B would mean twice the patching,
+running both permanently on DB Server would mean twice the patching,
 tuning, and monitoring surface for no benefit, working directly against
 NSM's simplicity-first priority.
 
@@ -56,10 +56,9 @@ there's no MySQL instance being provisioned at all.
 
 ## Shared DB server accepted, with mitigations for its known risk
 
-One Postgres instance on Server B serves every app (separate
+One Postgres instance on DB Server serves every app (separate
 database/user per app, not a fully shared database). This concentrates
-risk that
-previously prior per-project infra planning had argued against at the
+risk that prior per-project infra planning had argued against at the
 single-app level (see Novelize's own
 `docs/devops/db-app-consolidation-migration-plan.md`, which rejected
 even a same-droplet DB for one app in favor of full isolation). NSM
@@ -80,12 +79,56 @@ instead of prevention.
 ## Single production app server, not one per app
 
 Further consolidation beyond the DB question: all production app code
-also runs on one droplet (Server A), meaning a single droplet failure
+also runs on one droplet (App Server), meaning a single droplet failure
 takes the entire portfolio offline simultaneously, not just one app.
 Accepted because recovery is bounded — the GitHub-Action-provisions-a-
 replacement-droplet pattern already validated in Novelize's
 consolidation plan applies here too, so worst case is "minutes to
 redeploy," not "unknown."
+
+## Dedicated Marketing Server, not colocated on App Server
+
+Every app's marketing + blog site uses Nuxt with Nuxt Studio
+(https://nuxt.studio/) for visual content editing. Studio's live editor
+requires an actual SSR route running — a pure static export (no live
+Node process at all) would mean giving up the visual editor entirely, so
+"just static-generate it and skip running Nuxt altogether" was
+considered and rejected as infeasible for what's actually wanted here.
+
+Given a live Nuxt process is required per app regardless, the remaining
+question was where it runs. Rejected colocating it on App Server, in
+favor of a dedicated Marketing Server, for two reasons that both pointed
+the same direction:
+
+- **Isolation**: colocating would mean a whole-droplet failure on App
+  Server takes down every app's marketing/blog site along with the app
+  itself — the same kind of cascading failure that prompted this
+  question in the first place (an SSL cert issue had previously taken
+  down Novelize's marketing site without affecting the app; colocating
+  would remove that boundary at the droplet level even though cert
+  failures specifically stay isolated regardless, since certs are
+  per-domain not per-codebase).
+- **Cost**: bumping App Server a full tier to absorb the added Node
+  processes (4GB→8GB, +$24/mo) costs more than giving the lightweight
+  Nuxt processes their own small server (+$12/mo), since most of what
+  App Server's extra tier buys is PHP-FPM/Horizon headroom the Nuxt
+  processes don't need.
+
+This is the standard shape for **every** app's marketing site, not a
+Novelize-specific exception — confirmed this is a portfolio-wide need,
+not a one-off. Real visitor traffic hits pre-rendered static output;
+the live SSR route only serves the owner's own Studio editing sessions,
+which is why this server can start small. Static generation happens in
+CI (GitHub Actions), not on the droplet, so the server only ever runs
+the lightweight runtime, never the build step.
+
+**Started at 2GB/1vCPU (~$12/mo) deliberately without strong confidence
+in that number** — there's no benchmark data for Nuxt Content v3 +
+Studio's actual per-site idle footprint, and 1 vCPU means no true
+concurrency across apps' processes. Explicitly a "start here, validate
+against real DO Monitoring numbers as apps are added, upgrade before it
+becomes a problem" choice, same policy as every other server's sizing —
+just with a wider-than-usual error bar called out up front.
 
 ## Custom-built env var manager, not a third-party secrets tool
 
@@ -116,7 +159,7 @@ bottleneck, which is not the current or anticipated situation.
 
 Considered using DO Functions for per-app scheduled/async work (e.g.
 Novelize's progress-report emails). Rejected: this work is already well
-served by the existing Laravel scheduler + Horizon queue on Server A,
+served by the existing Laravel scheduler + Horizon queue on App Server,
 which is infrastructure already being paid for and already getting
 visibility built into NSM. Moving it to Functions would introduce a
 second deployment target with its own env var sync path and its own
@@ -124,7 +167,7 @@ success/failure visibility to build — real added complexity for no
 volume-driven benefit at this scale.
 
 **Where Functions could still make sense**: an external heartbeat check
-of NSM's own availability, run somewhere outside all three managed
+of NSM's own availability, run somewhere outside all four managed
 servers, since nothing hosted on NSM's own infrastructure can tell you
 when NSM itself is down. Not committed to yet — a free external
 uptime-check service may cover this without needing Functions at all.
