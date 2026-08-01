@@ -85,6 +85,29 @@ recreated (e.g. disaster recovery, resizing).
   data), so the name is meant to cue that this box needs the extra care
   even though staging sites live here too — see `decisions.md`.
 
+## Object storage
+
+- **One DO Spaces bucket per app** (and one per staging counterpart),
+  not one shared bucket — same isolation principle as DB Server's
+  per-app database + user, extended to file storage.
+- Each bucket gets its own scoped access key, minted via the DO API
+  (`POST /spaces/keys` with a `grants: [{bucket, permission}]` body)
+  rather than a `fullaccess` key — the same mechanism already
+  implemented in Fibermade's `spaces_key_ensure`/`spaces_bucket_ensure`
+  (`spaces.sh`). NSM's provisioning extends this pattern to every app
+  rather than inventing a new one.
+- Why not one shared bucket: a shared bucket would force either a
+  `fullaccess` key per app (one app's compromised credentials expose
+  every app's files) or accept losing the ability to revoke one app's
+  storage access without touching the others — the same kill-switch
+  reasoning applied to DB Server's per-app database users. Separate
+  buckets also prevent a wrong-prefix bug in one app's code from
+  reading/overwriting another app's files, and let per-app bucket
+  settings (public vs. private, CORS) differ without one app's needs
+  constraining another's.
+- Not a cost-driven decision — Spaces' flat per-bucket fee makes
+  multiple buckets cheap in absolute terms regardless.
+
 ## Server sizing
 
 Starting sizes, not permanent commitments — DO droplet resizing is cheap
