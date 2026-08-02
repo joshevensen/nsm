@@ -39,6 +39,10 @@ idempotent get-or-create patterns already proven out in Fibermade's
 
 - Surfaces DO Monitoring and Forge server monitoring data (CPU, memory,
   disk, alerts) per server. NSM does not collect these metrics itself.
+- Surfaces DO's CSPM scan findings (misconfigured firewalls, exposed
+  resources, etc.) portfolio-wide, read via the DO Security API. Same
+  read-only, don't-reimplement-it approach as every other source here —
+  see `decisions.md`.
 - Surfaces Horizon/queue values (queue depth, failed job counts) per app
   by reading the shared Redis instance directly, with each entry
   deep-linking to that app's own real Horizon dashboard for detail. NSM

@@ -144,6 +144,40 @@ makes sense because of NSM's threat model (no enterprise compliance
 requirement, no external team needing scoped access) — would not
 recommend rebuilding this for a higher-stakes context.
 
+Also evaluated DO's own Secrets Manager (`/v2/security` API surface) as
+a third option. Rejected — and this reinforces the decision above rather
+than complicating it, for two reasons: it appears immature (no dedicated
+product docs page as of this writing, minimal control panel presence,
+and DO's own marketplace/security docs point customers toward
+third-party tools — Doppler and Infisical by name — rather than its own
+feature), and more importantly it doesn't remove any work NSM already
+has to do. Whether values live in NSM's own DB or DO's store, NSM still
+has to read them and push them into each app's Forge-managed `.env` —
+that sync logic is required either way, so adopting it would only add a
+second place to check when debugging a secret, tied to a feature DO
+itself doesn't appear to be investing in.
+
+## Adopt DO's CSPM scanning, surfaced read-only in NSM
+
+DO's Security API (`/v2/security`) also covers Cloud Security Posture
+Management (CSPM) — automated scans of the DO account/infrastructure
+that flag misconfigurations (open ports, over-permissive firewall rules,
+publicly exposed resources, etc.) with severity ratings and remediation
+guidance. Unlike Secrets Manager (see above), this is worth adopting.
+
+The reasoning is the same pattern already used for DO Monitoring and
+Forge's own server monitoring: it's a DO-native feature that costs
+nothing to enable and requires no new subsystem to build — NSM just
+reads scan results via the API and displays them, the same read-only
+aggregation approach already established for every other monitoring
+source (see `features.md`). It directly covers the kind of mistake
+that's easy to make manually across four servers and four apps' worth
+of firewall rules, buckets, and DB users — e.g. an over-permissive DB
+Server firewall rule, or a Spaces bucket accidentally left public —
+exactly the category of error the portfolio's per-app isolation
+decisions (kill switch, scoped Spaces keys, per-app DB users) depend on
+being configured correctly to actually hold.
+
 ## No Kubernetes (DOKS)
 
 Rejected for this scale. DOKS earns its cost when you need autoscaling,
