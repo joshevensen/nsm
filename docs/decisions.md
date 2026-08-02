@@ -86,7 +86,7 @@ replacement-droplet pattern already validated in Novelize's
 consolidation plan applies here too, so worst case is "minutes to
 redeploy," not "unknown."
 
-## Dedicated Marketing Server, not colocated on App Server
+## Dedicated Website Server, not colocated on App Server
 
 Every app's marketing + blog site uses Nuxt with Nuxt Studio
 (https://nuxt.studio/) for visual content editing. Studio's live editor
@@ -97,7 +97,7 @@ considered and rejected as infeasible for what's actually wanted here.
 
 Given a live Nuxt process is required per app regardless, the remaining
 question was where it runs. Rejected colocating it on App Server, in
-favor of a dedicated Marketing Server, for two reasons that both pointed
+favor of a dedicated Website Server, for two reasons that both pointed
 the same direction:
 
 - **Isolation**: colocating would mean a whole-droplet failure on App

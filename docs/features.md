@@ -9,7 +9,7 @@ idempotent get-or-create patterns already proven out in Fibermade's
 `dns.sh`, `spaces.sh`, `stripe-webhook.sh`):
 
 - Spin up a new SaaS: create its Forge site on App Server, its database +
-  user on DB Server, its staging site + database on NSM Server, DNS
+  user on DB Server, its staging site + database on Staging Server, DNS
   records, Spaces bucket, Stripe webhook, initial `.env`.
 - Spin down / decommission a SaaS.
 - Manage existing apps: redeploy, view deployment status, restart
